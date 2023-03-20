@@ -21,8 +21,8 @@ function Print-Usage {
     Write-Output "  -help        : Print this help"
 }
 
-$gitPluginURL = "git@github.com:sinbad/UE4GitPlugin.git"
-$gitPluginBranch = "ue4_24-fixes"
+$gitPluginURL = "https://github.com/ProjectBorealis/UEGitPlugin.git"
+$gitPluginBranch = "release"
 
 $gitlfs_notlocked = @"
 *.fbx
