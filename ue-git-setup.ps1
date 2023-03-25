@@ -67,7 +67,6 @@ $gitlfs_notlocked = @"
 *.ma
 *.max
 *.mb
-*.mb
 *.mid
 *.mj2
 *.mlt
