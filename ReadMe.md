@@ -9,6 +9,7 @@ automation tools assume P4, which can be inconvenient).
 These scripts support **UE4 and UE5** and will detect which one your project is using
 
 * [Setting up a project for Git / Git-LFS](./doc/GitSetup.md): including LFS locking
+  * + in fork: locking, ignoring file types and folders from [XistGG/UE5-Git-Init](https://github.com/XistGG/UE5-Git-Init/) and Epic Games' default `.urcignore` file
 * [Managing Git LFS Locking Tasks](https://github.com/sinbad/GitScripts): push and unlock, release locks you don't need any more
 * [Packaging a Game](./doc/Package.md): building, cooking, archiving
 * [Releasing a Game](./doc/Release.md): e.g. uploading to Itch, Steam
