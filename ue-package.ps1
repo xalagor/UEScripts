@@ -383,6 +383,8 @@ catch {
     Exit 9
 }
 
-# Revert any remaining temp changes
-git checkout .
+if (-not $test -and $isGit) {
+    # Revert any remaining temp changes
+    git checkout .
+}
 Write-Output "~-~-~ Unreal Packaging Helper Completed OK ~-~-~"
