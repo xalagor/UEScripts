@@ -298,6 +298,11 @@ try {
                 Write-Output "Pull: $filename ($oid)"
                 $subdir = [System.IO.Path]::GetDirectoryName($localbuiltdata)
                 New-Item -ItemType Directory -Path $subdir -Force > $null
+                # If the file already exists, make sure it's not read-only
+                if (Test-Path $localbuiltdata -PathType Leaf)
+                {
+                    Set-ItemProperty -Path $localbuiltdata -Name IsReadOnly -Value $false
+                }
                 Copy-Item $remotebuiltdata $localbuiltdata
                 # Modify the date-time since Git writes the timestamp at pull time but Copy-Item preserves it
                 # So it looks like the builtdata is out of date
