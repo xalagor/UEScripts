@@ -5,14 +5,14 @@
 [CmdletBinding()] # Fail on unknown args
 param (
     [string]$src,
+    [string]$out,
     [switch]$major = $false,
     [switch]$minor = $false,
     [switch]$patch = $false,
     [switch]$hotfix = $false,
-    # Don't incrememnt version
+    [switch]$nightly = $false,
+    # Don't increment version
     [switch]$keepversion = $false,
-    # Force move tag
-    [switch]$forcetag = $false,
     # Name of variant to build (optional, uses DefaultVariants from packageconfig.json if unspecified)
     [array]$variants,
     # Testing mode; skips clean checks, tags
@@ -35,15 +35,16 @@ param (
 function Write-Usage {
     Write-Output "Steve's Unreal packaging tool"
     Write-Output "Usage:"
-    Write-Output "  ue-package.ps1 [-src:sourcefolder] [-major|-minor|-patch|-hotfix] [-keepversion] [-force] [-variant=VariantName] [-test] [-dryrun]"
+    Write-Output "  ue-package.ps1 [-src:sourcefolder] [-out:folder] [-major|-minor|-patch|-hotfix] [-keepversion] [-force] [-variant=VariantName] [-test] [-dryrun]"
     Write-Output " "
     Write-Output "  -src          : Source folder (current folder if omitted), must contain packageconfig.json"
+    Write-OUtput "  -out          : Overrides OutputDir in packageconfig.json"
     Write-Output "  -major        : Increment major version i.e. [x++].0.0.0"
     Write-Output "  -minor        : Increment minor version i.e. x.[x++].0.0"
     Write-Output "  -patch        : Increment patch version i.e. x.x.[x++].0 (default)"
     Write-Output "  -hotfix       : Increment hotfix version i.e. x.x.x.[x++]"
     Write-Output "  -keepversion  : Keep current version number, doesn't tag unless -forcetag"
-    Write-Output "  -forcetag     : Move any existing version tag"
+    Write-Output "  -nightly      : Nightly build, doesn't tag, doesn't commit, re-uses same nightly folder, appends git rev version"
     Write-Output "  -variants Name1,Name2,Name3"
     Write-Output "                : Build only named variants instead of DefaultVariants from packageconfig.json"
     Write-Output "  -test         : Testing mode, separate builds, allow dirty working copy"
@@ -147,11 +148,16 @@ try {
 
     $mapsdesc = $maps ? $maps -join ", " : "Default (Project Settings)"
 
+
     Write-Output ""
     Write-Output "Project File    : $projfile"
     Write-Output "UE Version      : $ueVersion"
     Write-Output "UE Install      : $ueinstall"
-    Write-Output "Output Folder   : $($config.OutputDir)"
+    if ($out.Length -eq 0) {
+        Write-Output "Output Folder   : $($config.OutputDir)"
+    } else {
+        Write-Output "Output Folder   : $out"
+    }
     Write-Output "Zipped Folder   : $($config.ZipDir)"
     Write-Output ""
     Write-Output "Chosen Variants : $chosenVariantNames"
@@ -168,7 +174,20 @@ try {
         $patch = $true
     }
     $versionNumber = $null
-    if ($keepversion) {
+    if ($nightly) {
+        $versionNumber = "nightly"
+
+        if ($isGit)
+        {
+            # Add the git ref to the version number in the project ONLY (not our folder)
+            $tempverobj = Get-ProjectVersionComponents $src
+            $gitref = $(git rev-parse --short HEAD)
+            $tempverobj.postfix = "-$gitref"
+            Write-Output "Packaging nightly-$gitref"
+            Write-ProjectVersionFromObject -srcfolder:$src -versionObj:$tempverobj -dryrun:$dryrun
+        }
+
+    } elseif ($keepversion) {
         $versionNumber = Get-Project-Version $src
     } else {
         # Bump up version, passthrough options
@@ -199,27 +218,42 @@ try {
 
     # For tagging release
     # We only need to grab the main version once
-    if ((-not $keepversion) -or $forcetag) {
-        $forcearg = ""
-        if ($forcetag) {
-            $forcearg = "-f"
-        }
+    if (-not $keepversion -and -not $nightly) {
+
         if (-not $test -and -not $dryrun -and $isGit) {
             if ($src -ne ".") { Push-Location $src }
-            git tag $forcearg -a $versionNumber -m "Automated release tag"
+            git tag -a $versionNumber -m "Automated release tag"
             if ($LASTEXITCODE -ne 0) { Exit $LASTEXITCODE }
             if ($src -ne ".") { Pop-Location }
         }
     }
 
     
+    # We need to build the host Editor target explicitly first, which will be used
+    # to run the "Cook" stage. If we don't do this, then any source plugins will
+    # be missing in a clean checkout build and the cook stage will fail
+    Write-Output "Building Editor (for Cooking)"
+    $cmdargs = @()
+    $cmdargs += "-src:$src"
+    if ($dryrun) {
+        $cmdargs += "-dryrun"
+    }
+    Invoke-Expression "&'$PSScriptRoot/ue-build.ps1' -mode:dev $cmdargs"
+
     $ueEditorCmd = Get-UEEditorCmd $ueVersion $ueinstall
     $runUAT = Join-Path $ueinstall "Engine/Build/BatchFiles/RunUAT$batchSuffix"
 
 
     foreach ($var in $chosenVariants) {
 
-        $outDir = Get-Package-Dir -config:$config -versionNumber:$versionNumber -variantName:$var.Name
+        if ($out.Length -gt 0) {
+            $outDir = Join-Path $out "$($var.Name)-$($versionNumber)"
+        } else {
+            $outDir = Get-Package-Dir -config:$config -versionNumber:$versionNumber -variantName:$var.Name
+        }
+
+        # Delete previous
+        Remove-Item -Path $outDir -Recurse -Force -ErrorAction SilentlyContinue
 
         $argList = [System.Collections.ArrayList]@()
         $argList.Add("-ScriptsForProject=`"$projfile`"") > $null
@@ -242,7 +276,6 @@ try {
             $argList.Add("-pak") > $null
         }
         $argList.Add("-prereqs") > $null
-        $argList.Add("-nodebuginfo") > $null
         $argList.Add("-build") > $null
         $argList.Add("-target=$($config.Target)") > $null
         $argList.Add("-clientconfig=$($var.Configuration)") > $null
@@ -271,6 +304,45 @@ try {
             }
 
         }
+
+        if ($config.RenameExe.Length -gt 0) {
+            if ($dryrun) {
+                Write-Output "Would have renamed EXE from $($config.Target) to $($config.RenameExe)"
+            } else {
+                # Rename the executable
+                $subdirs = @(Get-ChildItem $outdir)
+                $subdirs | ForEach-Object {
+                    $renameExeSuffix = ""
+                    if ($var.Platform -like "Win*") {
+                        $renameExeSuffix = ".exe"
+                    }
+                    $exeSrcName = Join-Path $_.FullName "$($config.Target)$renameExeSuffix"
+                    $exeDestName = Join-Path $_.FullName "$($config.RenameExe)$renameExeSuffix"
+                    Move-Item $exeSrcName $exeDestName -Force
+                }
+            }
+            
+        }
+
+        if ($var.Configuration -eq "Shipping")
+        {
+            # For shipping, move the PDBs aside but keep them for later use
+            $outDirPDB = "$($outDir)-ShippingPDB"
+            Remove-Item -Path $outDirPDB -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory $outDirPDB -Force > $null
+
+            $pdbs = @(Get-ChildItem -Path $outDir -Filter *.pdb -Recurse -ErrorAction SilentlyContinue -Force)
+            # Need to be in dir to calculate relative
+            Push-Location $outDir 
+            $pdbs | ForEach-Object {
+                $pdbdir = Join-Path $outDirPDB $($_.DirectoryName | Resolve-Path -Relative)
+                New-Item -ItemType Directory $pdbdir -Force > $null
+                $pdbdest = Join-Path $outDirPDB $($_.FullName | Resolve-Path -Relative)
+                Move-Item $_.FullName $pdbdest -Force
+            }
+            Pop-Location
+        }
+
 
         if ($var.Zip) {
             if ($dryrun) {
@@ -311,4 +383,8 @@ catch {
     Exit 9
 }
 
+if (-not $test -and $isGit) {
+    # Revert any remaining temp changes
+    git checkout .
+}
 Write-Output "~-~-~ Unreal Packaging Helper Completed OK ~-~-~"

@@ -69,20 +69,23 @@ try {
             }
         }
 
-        # Run cleanup tool
-        $cleanupargs = @()
-        if ($nocloseeditor) {
-            $cleanupargs += "-nocloseeditor"
-        }
-        if ($dryrun) {
-            $cleanupargs += "-dryrun"
-        }
-        # Use Invoke-Expression so we can use a string as options
-        Invoke-Expression "&'$PSScriptRoot/ue-cleanup.ps1' $cleanupargs"
+        # Actually don't clean up anymore, no longer needed
+        # # Run cleanup tool
+        # $cleanupargs = @()
+        # if ($nocloseeditor) {
+        #     $cleanupargs += "-nocloseeditor"
+        # }
+        # if ($dryrun) {
+        #     $cleanupargs += "-dryrun"
+        # }
+        # # Use Invoke-Expression so we can use a string as options
+        # Invoke-Expression "&'$PSScriptRoot/ue-cleanup.ps1' $cleanupargs"
 
         # Stopped using rebase because it's a PITA when it goes wrong
         Write-Output "Pulling latest from Git..."
-        git pull --recurse-submodules
+        # I know Linus says we shouldn't accept the default merge message but pfft
+        # No artist wan't to see that git merge message pop-up, come on, it's obvious why
+        git pull --recurse-submodules --no-edit
         if ($LASTEXITCODE -ne 0) {
             Write-Output "ERROR: git pull failed!"
             exit 5

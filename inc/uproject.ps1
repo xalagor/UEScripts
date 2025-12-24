@@ -26,7 +26,11 @@ function Get-Uproject-Filename {
     }
 
     # Resolve to absolute (do it here and not in join so missing file is friendlier error)
-    return Resolve-Path $projfile
+    if ($projfile) {
+        return Resolve-Path $projfile
+    } else {
+        return $projfile
+    }
 }
 
 # Read the uproject file and return as a PSCustomObject
@@ -47,7 +51,24 @@ function Get-UE-Version {
         [psobject]$uproject
     )
 
-    return $uproject.EngineAssociation
+    if ($uproject.EngineAssociation) {
+        $assoc = $uproject.EngineAssociation
+    } else {
+        # Plugin
+        $assoc = $uproject.EngineVersion
+    }
+
+    # If this is a GUID "{A1234786-..}" then it's a source build, we need to resolve it via registry
+    if ($assoc -and $assoc.StartsWith("{")) {
+        # Look up the source dir from registry setting
+        $srcdir = Get-ItemPropertyValue 'Registry::HKEY_CURRENT_USER\Software\Epic Games\Unreal Engine\Builds' -Name $assoc
+        # In source build, read Build.version JSON
+        $buildverfile = Join-Path $srcdir "Engine/Build/Build.version"
+        $buildjson = (Get-Content $buildverfile) | ConvertFrom-Json
+        return "$($buildjson.MajorVersion).$($buildjson.MinorVersion)"
+    } else {
+        return $assoc
+    }
 }
 
 function Get-Is-UE5 {
@@ -84,7 +105,13 @@ function Get-UE-Install {
             $uroot = "C:\Program Files\Epic Games"
         } 
 
-        $uinstall = Join-Path $uroot "UE_$ueVersion"
+        # When using $ueVersion, strip off 3rd digit if any
+        $regex = "(\d+\.\d+)(\.\d+)?"
+        $match = $ueVersion | Select-String -Pattern $regex
+
+        $ueVersionTrimmed = $match.Matches[0].Groups[1].Value
+        
+        $uinstall = Join-Path $uroot "UE_$ueVersionTrimmed"
     }
 
     # Test we can find RunUAT.bat

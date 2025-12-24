@@ -9,15 +9,14 @@ param (
 
 function Print-Usage {
     Write-Output "Steve's Unreal Build Tool"
-    Write-Output "   This is a WIP, only builds for dev right now"
     Write-Output "Usage:"
     Write-Output "  ue-build.ps1 [[-mode:]<dev|test|prod>] [[-src:]sourcefolder] [Options]"
     Write-Output " "
     Write-Output "  -mode        : Build mode"
     Write-Output "               : dev = build Development Editor, dlls only (default)"
     Write-Output "               : cleandev = build Development Editor CLEANLY"
-    Write-Output "               : test = build Development and pacakge for test (TODO)"
-    Write-Output "               : prod = build Shipping and package for production (TODO)"
+    Write-Output "               : test = build Development and pacakge for test"
+    Write-Output "               : prod = build Shipping and package for production"
     Write-Output "  -src         : Source folder (current folder if omitted)"
     Write-Output "               : (should be root of project)"
     Write-Output "  -nocloseeditor : Don't close Unreal editor (this will prevent DLL cleanup)"
@@ -45,6 +44,11 @@ if (-not $mode) {
     $mode = "dev"
 }
 
+if ($src.Length -eq 0) {
+    $src = "."
+    Write-Verbose "-src not specified, assuming current directory"
+}
+
 if (-not ($mode -in @('dev', 'cleandev', 'test', 'prod'))) {
     Print-Usage
     Write-Output "ERROR: Invalid mode argument: $mode"
@@ -52,6 +56,7 @@ if (-not ($mode -in @('dev', 'cleandev', 'test', 'prod'))) {
 
 }
 
+. $PSScriptRoot\inc\buildtargets.ps1
 
 $result = 0
 
@@ -120,15 +125,26 @@ try {
     switch ($mode) {
         'dev' {
             # Stolen from the VS project settings because boy is this badly documented
-            # Target needs "Editor" on the end to make this "Development Editor"
             # The -Project seems to be needed, as is the -FromMsBuild
             # -Project has to point at the ABSOLUTE PATH of the uproject
             $uprojfileabs = Join-Path "$(Get-Location)" $uprojfile
-            $buildargs = "${uprojname}Editor Win64 Development -Project=`"${uprojfileabs}`" -WaitMutex -FromMsBuild"
+            $target = Find-DefaultTarget $src "Editor"
+            $buildargs = "$target Win64 Development -Project=`"${uprojfileabs}`" -WaitMutex -FromMsBuild"
         }
         'cleandev' {
             $uprojfileabs = Join-Path "$(Get-Location)" $uprojfile
-            $buildargs = "${uprojname}Editor Win64 Development -Project=`"${uprojfileabs}`" -WaitMutex -FromMsBuild -clean"
+            $target = Find-DefaultTarget $src "Editor"
+            $buildargs = "$target Win64 Development -Project=`"${uprojfileabs}`" -WaitMutex -FromMsBuild -clean"
+        }
+        'test' {
+            $uprojfileabs = Join-Path "$(Get-Location)" $uprojfile
+            $target = Find-DefaultTarget $src "Game"
+            $buildargs = "$target Win64 Test -Project=`"${uprojfileabs}`" -WaitMutex -FromMsBuild -clean"
+        }
+        'prod' {
+            $uprojfileabs = Join-Path "$(Get-Location)" $uprojfile
+            $target = Find-DefaultTarget $src "Game"
+            $buildargs = "$target Win64 Shipping -Project=`"${uprojfileabs}`" -WaitMutex -FromMsBuild -clean"
         }
         default {
             # TODO

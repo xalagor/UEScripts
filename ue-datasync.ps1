@@ -191,9 +191,16 @@ try {
         }
     }
 
-    # Create project sync dir if necessary
+    # Create project sync dir if necessary when pushing
     $syncdir = Join-Path $root $uprojname
-    New-Item -ItemType Directory $syncdir -Force > $null
+    if ($mode -eq "push") {
+        New-Item -ItemType Directory $syncdir -Force > $null
+    } elseif (-not (Test-Path $syncdir)) {
+        # Abort, no need to pull anything
+        Write-Output "No sync dir at $syncdir, aborting"
+        Exit 0
+    }
+
     Write-Output "Sync project folder: $syncdir"
 
     $umaps = Get-Current-Umaps
@@ -224,7 +231,7 @@ try {
             # In push mode, we only upload our builtdata if there is no existing
             # entry for that OID by default (safest). Or, if forced to do so
             if (-not (Test-Path $localbuiltdata -PathType Leaf)) {
-                Write-Warning "Skipping $filename, local file missing"
+                Write-Verbose "Skipping $filename, local file missing"
                 continue
             }
 
@@ -280,7 +287,7 @@ try {
                     }
             
                 } else {
-                    Write-Warning "Skipping $filename, remote file missing"
+                    Write-Verbose "Skipping $filename, remote file missing"
                     continue
                 }
             }
@@ -291,7 +298,16 @@ try {
                 Write-Output "Pull: $filename ($oid)"
                 $subdir = [System.IO.Path]::GetDirectoryName($localbuiltdata)
                 New-Item -ItemType Directory -Path $subdir -Force > $null
-                Copy-Item $remotebuiltdata $localbuiltdata    
+                # If the file already exists, make sure it's not read-only
+                if (Test-Path $localbuiltdata -PathType Leaf)
+                {
+                    Set-ItemProperty -Path $localbuiltdata -Name IsReadOnly -Value $false
+                }
+                Copy-Item $remotebuiltdata $localbuiltdata
+                # Modify the date-time since Git writes the timestamp at pull time but Copy-Item preserves it
+                # So it looks like the builtdata is out of date
+                $localbuiltdatafile = Get-Item $localbuiltdata
+                $localbuiltdatafile.LastWriteTime = (Get-Date)
             }
         }
     }
