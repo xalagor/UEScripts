@@ -58,15 +58,15 @@ if (-not $isGit)
     Exit 3
 }
 # Check that source contains Lyra
-if (-not (Test-Path (Join-Path $src "LyraStarterGame.uproject")))
+if (-not (Test-Path (Join-Path $src "Lyra.uproject")))
 {
-    Write-Output "Source folder '$src' does not contain LyraStarterGame.uproject"
+    Write-Output "Source folder '$src' does not contain Lyra.uproject"
     Exit 3
 }
 # Check that destination contains Lyra
-if (-not (Test-Path (Join-Path $dest "LyraStarterGame.uproject")))
+if (-not (Test-Path (Join-Path $dest "Lyra.uproject")))
 {
-    Write-Output "Destination folder '$dest' does not contain LyraStarterGame.uproject"
+    Write-Output "Destination folder '$dest' does not contain Lyra.uproject"
     Exit 3
 }
 # Check that source & destination are not the same (no standardise path in ps, Join-Path does it)
@@ -131,9 +131,9 @@ else
 }
 
 # Check that dest contains Lyra
-if (-not (Test-Path (Join-Path $dest "LyraStarterGame.uproject")))
+if (-not (Test-Path (Join-Path $dest "Lyra.uproject")))
 {
-    Write-Output "Destination folder '$dest' does not contain LyraStarterGame.uproject after checking out $upstreambranch"
+    Write-Output "Destination folder '$dest' does not contain Lyra.uproject after checking out $upstreambranch"
     Exit 3
 }
 
